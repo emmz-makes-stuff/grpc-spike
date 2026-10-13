@@ -17,8 +17,8 @@
 
 ## 3. Code reading: allocation sites
 
-- [ ] 3.1 Read the generated message code and the Google.Protobuf 3.36.2 runtime paths it calls (parse/merge, WriteTo, CalculateSize, Clone, collections, ByteString, strings, UnknownFieldSet). Record candidate allocation sites in `docs/analysis/report.md` with file:line citations and a provisional tier (A/B/C) and hot-path or one-off label. Verify: every hypothesis in the `codegen-analysis-report` spec has at least one cited entry, or a note saying no site was found.
-- [ ] 3.2 Read the generated stub and marshaller code, and the Grpc.Net.Client / Grpc.AspNetCore call paths it hands off to. Record candidate sites in the same way. Verify: the report separates sites in generated code from sites in the runtime.
+- [x] 3.1 Read the generated message code and the Google.Protobuf 3.36.2 runtime paths it calls (parse/merge, WriteTo, CalculateSize, Clone, collections, ByteString, strings, UnknownFieldSet). Record candidate allocation sites in `docs/analysis/report.md` with file:line citations and a provisional tier (A/B/C) and hot-path or one-off label. Verify: every hypothesis in the `codegen-analysis-report` spec has at least one cited entry, or a note saying no site was found.
+- [x] 3.2 Read the generated stub and marshaller code, and the Grpc.Net.Client / Grpc.AspNetCore call paths it hands off to. Record candidate sites in the same way. Verify: the report separates sites in generated code from sites in the runtime.
 
 ## 4. Benchmarks
 

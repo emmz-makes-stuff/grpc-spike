@@ -8,11 +8,31 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+  </ItemGroup>
+
+  <!-- End-to-end calls (task 4.4, design D5) host the corpus service in-process with ASP.NET Core TestHost. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../src/Corpus/Corpus.csproj" />
     <ProjectReference Include="../Reference/Reference.csproj" />
   </ItemGroup>
+
+  <!--
+    Stamps every central package pin into the assembly as [AssemblyMetadata("Pin:<id>", "<version>")], so the
+    environment.md sidecar records the subject versions from Directory.Packages.props, not a hand-kept copy.
+  -->
+  <Target Name="StampPackagePins" BeforeTargets="GetAssemblyAttributes">
+    <ItemGroup>
+      <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+        <_Parameter1>Pin:%(PackageVersion.Identity)</_Parameter1>
+        <_Parameter2>%(PackageVersion.Version)</_Parameter2>
+      </AssemblyAttribute>
+    </ItemGroup>
+  </Target>
 
 </Project>

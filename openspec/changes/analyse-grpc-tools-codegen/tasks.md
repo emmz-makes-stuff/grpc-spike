@@ -22,13 +22,13 @@
 
 ## 4. Benchmarks
 
-- [ ] 4.1 Set up BenchmarkDotNet with `MemoryDiagnoser`, both runtimes (custom `net11.0` toolchain if 0.15.8 lacks a moniker), and exporters (GitHub Markdown + JSON) writing to `docs/analysis/results/<runtime>/`. Verify: a trivial benchmark runs on both runtimes and the export records hardware, OS, runtime and subject versions.
-- [ ] 4.2 Add per-shape message benchmarks for parse, serialize, CalculateSize, MergeFrom and Clone. Verify: a full run produces allocated bytes, GC counts and mean time for every shape and operation pair.
-- [ ] 4.3 Add marshaller-level stub benchmarks using minimal test serialization/deserialization contexts. Verify: results report allocations for marshalling only.
-- [ ] 4.4 Add TestHost end-to-end benchmarks (unary and the three streaming kinds) using the same messages as 4.3. Verify: results show whole-call allocations next to the marshaller-only figures.
-- [ ] 4.5 Add protobuf-net reference equivalents for comparable shapes, labelled `Reference`. Verify: exports show the reference rows marked as reference-only.
-- [ ] 4.6 Add the on-demand attribution switch (`EventPipeProfiler` GcVerbose), and document how to run it and summarise a trace in `docs/analysis/README.md`. Verify: an attributed run for one benchmark names the allocated types and the methods allocating them.
-- [ ] 4.7 Run the full suite on both runtimes and commit the exports. Verify: `docs/analysis/results/net10.0/` and `.../net11.0/` contain results for every benchmark.
+- [x] 4.1 Set up BenchmarkDotNet with `MemoryDiagnoser`, both runtimes (custom `net11.0` toolchain if 0.15.8 lacks a moniker), and exporters (GitHub Markdown + JSON) writing to `docs/analysis/results/<runtime>/`. Verify: a trivial benchmark runs on both runtimes and the export records hardware, OS, runtime and subject versions.
+- [x] 4.2 Add per-shape message benchmarks for parse, serialize, CalculateSize, MergeFrom and Clone. Verify: a full run produces allocated bytes, GC counts and mean time for every shape and operation pair.
+- [x] 4.3 Add marshaller-level stub benchmarks using minimal test serialization/deserialization contexts. Verify: results report allocations for marshalling only.
+- [x] 4.4 Add TestHost end-to-end benchmarks (unary and the three streaming kinds) using the same messages as 4.3. Verify: results show whole-call allocations next to the marshaller-only figures.
+- [x] 4.5 Add protobuf-net reference equivalents for comparable shapes, labelled `Reference`. Verify: exports show the reference rows marked as reference-only.
+- [x] 4.6 Add the on-demand attribution switch (`EventPipeProfiler` GcVerbose), and document how to run it and summarise a trace in `docs/analysis/README.md`. Verify: an attributed run for one benchmark names the allocated types and the methods allocating them.
+- [x] 4.7 Run the full suite on both runtimes and commit the exports. Verify: `docs/analysis/results/net10.0/` and `.../net11.0/` contain results for every benchmark.
 
 ## 5. Analysis report
 

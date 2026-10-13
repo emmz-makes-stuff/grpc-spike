@@ -18,8 +18,8 @@ These facts were checked on 2026-10-13:
   - xunit.v3 4.0.2;
   - `Microsoft.AspNetCore.TestHost` 10.0.12.
 - **Unlisted on NuGet:** `Google.Protobuf` 4.0.0-rc1/rc2 (placeholders, ignored).
-- **Grpc.Tools on macOS:** 2.83.0 ships only `macosx_x64` binaries. Its protoc (libprotoc 35.1) runs under
-  Rosetta on this Mac.
+- **Grpc.Tools on macOS:** 2.83.0 shipped only `macosx_x64` binaries. 2.84.0 (the pin) ships
+  `macosx_universal` (arm64 + x64), so protoc runs natively and Rosetta 2 is not needed.
 - **Installed SDKs:** 10.0.400 and 11.0.100-rc.1.
 
 ## Goals / Non-Goals
@@ -31,7 +31,8 @@ These facts were checked on 2026-10-13:
 
 **Non-Goals:**
 - Writing any code generator, prototype or patch.
-- Kestrel over a real network, or Linux/x64 timing runs. These can be added later.
+- Kestrel over a real network. It can be added later.
+- Timing runs on more than one machine. The committed run is one AWS x86_64 Linux instance (see D8).
 - .NET Framework or netstandard consumers.
 
 ## Decisions
@@ -62,7 +63,7 @@ BenchmarkDotNet 0.15.8 with `MemoryDiagnoser`. Allocation attribution uses
 `EventPipeProfiler(EventPipeProfile.GcVerbose)`, which works across platforms and writes speedscope/nettrace
 output. It's enabled per run with a command-line switch, not on every run.
 
-- **Why:** we need allocated bytes per operation, plus the call sites that allocate them, on macOS.
+- **Why:** we need allocated bytes per operation, plus the call sites that allocate them, on macOS and Linux.
 - **Rejected:** stopwatch harnesses; Windows-only ETW profilers; `dotnet-trace` by hand (kept as a
   fallback only).
 
@@ -121,8 +122,9 @@ xUnit v3 on Microsoft.Testing.Platform. `global.json` has `"test": { "runner": "
 - **Rejected:** a database or dashboard.
 
 ### D8: Evidence order
-Allocations are the primary evidence, because they don't depend on the machine. Timings are secondary and
-labelled "Apple Silicon (arm64), macOS". protobuf-net rows are labelled `Reference` and never enter go/no-go.
+Allocations are the primary evidence, because they don't depend on the machine. Timings are secondary, and each
+run labels them with its machine (CPU, architecture, OS) in `environment.md`. The committed run is on an AWS
+Ubuntu x86_64 instance (devlog `20261013-1330-decision-aws-bench-host.md`). protobuf-net rows are labelled `Reference` and never enter go/no-go.
 
 ### Finding taxonomy
 - **Tier A:** generator only.
@@ -163,11 +165,9 @@ All gates run non-interactively and exit non-zero on failure.
 - **[BenchmarkDotNet 0.15.8 may lack a .NET 11 runtime moniker]** → Configure a custom
   `CsProjCoreToolchain` with `NetCoreAppSettings("net11.0", ...)`, or run per framework with
   `--runtimes`. This gets verified in the benchmark scaffolding task.
-- **[Grpc.Tools has no arm64 protoc on macOS]** → Rosetta 2 is a logged dependency. It only affects code
-  generation, not the measured code.
 - **[Committed generated code can drift]** → The build always regenerates, and the `git diff --exit-code`
   check catches drift.
-- **[Timings measured on one Apple Silicon machine]** → Timings are labelled and kept secondary. Allocation
+- **[Timings measured on one shared, burstable cloud instance]** → Timings are labelled and kept secondary. Allocation
   counts carry the decision.
 - **[Attribution traces are large]** → Traces are generated on demand and not committed. Only the
   summarised attribution goes into the report.

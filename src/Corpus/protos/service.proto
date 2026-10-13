@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+import "scalars.proto";
+
+// Shape: one method per call kind. Scalars in both directions keeps the stub benchmarks
+// free of string decoding, so the stub layer's own share is visible.
+service CorpusService {
+  rpc Unary(Scalars) returns (Scalars);
+  rpc ServerStreaming(Scalars) returns (stream Scalars);
+  rpc ClientStreaming(stream Scalars) returns (Scalars);
+  rpc Bidi(stream Scalars) returns (stream Scalars);
+}

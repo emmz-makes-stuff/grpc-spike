@@ -7,6 +7,33 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" />
+    <!-- Brings Grpc.Core.Api (ClientBase, ServerServiceDefinition) for GrpcServices="Both". -->
+    <PackageReference Include="Grpc.Net.Client" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" />
   </ItemGroup>
+
+  <!--
+    Design D4: generated C# is written into a tracked folder so findings can cite it by file and line.
+    Grpc.Tools adds the outputs to Compile itself, so the default glob must not add them again.
+    grpc_csharp_plugin writes no *Grpc.cs for a proto without services, yet Grpc.Tools still expects one,
+    so stubs are generated only for the service proto.
+  -->
+  <ItemGroup>
+    <Compile Remove="Generated/**" />
+    <Protobuf Include="protos/**/*.proto" ProtoRoot="protos" GrpcServices="None" OutputDir="Generated/%(RelativeDir)" CompileOutputs="true" />
+    <Protobuf Update="protos/service.proto" GrpcServices="Both" />
+  </ItemGroup>
+
+  <!--
+    Grpc.Tools skips protos whose outputs are newer, and a Grpc.Tools version bump is not one of its
+    inputs. Deleting the committed outputs first makes every build regenerate them, so `make generated`
+    compares the committed code with what the pinned generator produces now.
+  -->
+  <Target Name="RegenerateCommittedCode" BeforeTargets="Protobuf_BeforeCompile" Condition=" '$(DesignTimeBuild)' != 'true' ">
+    <ItemGroup>
+      <_CommittedGenerated Include="Generated/**/*.cs" />
+    </ItemGroup>
+    <Delete Files="@(_CommittedGenerated)" />
+  </Target>
 
 </Project>

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+import "scalars.proto";
+
+// Shape: proto3 `optional` fields (explicit presence).
+message Optional {
+  optional int32 int32_value = 1;
+  optional int64 int64_value = 2;
+  optional double double_value = 3;
+  optional bool bool_value = 4;
+  optional string string_value = 5;
+  optional bytes bytes_value = 6;
+  optional Colour enum_value = 7;
+}

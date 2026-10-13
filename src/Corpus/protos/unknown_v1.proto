@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package corpus.unknown.v1;
+
+option csharp_namespace = "GrpcSpike.Corpus.Unknown.V1";
+
+// Shape: unknown fields, reader side. Knows only fields 1-2 of the v2 writer's message.
+message Record {
+  int32 id = 1;
+  string name = 2;
+}

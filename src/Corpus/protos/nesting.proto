@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: nested messages. One recursive definition; samples populate it to depths 1, 3 and 8.
+message Node {
+  int32 value = 1;
+  string label = 2;
+  Node child = 3;
+}

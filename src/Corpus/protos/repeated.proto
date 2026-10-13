@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: repeated fields. proto3 packs repeated scalars by default; the unpacked variants opt out.
+message Repeated {
+  repeated int32 packed_int32 = 1;
+  repeated double packed_double = 2;
+  repeated int32 unpacked_int32 = 3 [packed = false];
+  repeated double unpacked_double = 4 [packed = false];
+  repeated string strings = 5;
+  repeated RepeatedItem items = 6;
+}
+
+message RepeatedItem {
+  int32 id = 1;
+  string name = 2;
+}

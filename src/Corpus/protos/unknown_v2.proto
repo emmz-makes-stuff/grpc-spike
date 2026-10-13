@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package corpus.unknown.v2;
+
+option csharp_namespace = "GrpcSpike.Corpus.Unknown.V2";
+
+// Shape: unknown fields, writer side. Fields 3-6 (one per wire type) are unknown to the v1 reader.
+message Record {
+  int32 id = 1;
+  string name = 2;
+  int64 added_varint = 3;
+  fixed64 added_fixed64 = 4;
+  string added_string = 5;
+  fixed32 added_fixed32 = 6;
+}

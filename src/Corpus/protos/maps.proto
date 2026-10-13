@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: map fields with scalar, string and message values.
+message Maps {
+  map<int32, int64> int_to_int = 1;
+  map<string, string> string_to_string = 2;
+  map<string, MapValue> string_to_message = 3;
+}
+
+message MapValue {
+  int32 id = 1;
+  string name = 2;
+}

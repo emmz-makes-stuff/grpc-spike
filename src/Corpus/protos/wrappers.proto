@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+import "google/protobuf/wrappers.proto";
+
+// Shape: well-known wrapper types (generated as nullable value types and string/ByteString).
+message Wrappers {
+  google.protobuf.Int32Value int32_value = 1;
+  google.protobuf.Int64Value int64_value = 2;
+  google.protobuf.DoubleValue double_value = 3;
+  google.protobuf.BoolValue bool_value = 4;
+  google.protobuf.StringValue string_value = 5;
+  google.protobuf.BytesValue bytes_value = 6;
+}

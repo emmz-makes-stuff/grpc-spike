@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: bytes fields, small and large, to expose copying on parse.
+message Bytes {
+  bytes small_blob = 1;
+  bytes large_blob = 2;
+}

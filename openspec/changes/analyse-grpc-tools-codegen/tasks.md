@@ -8,12 +8,12 @@
 
 ## 2. Shape corpus and committed generated code
 
-- [ ] 2.1 Write the scalar, string and bytes shape protos, and wire `<Protobuf ... OutputDir="Generated/%(RelativeDir)" GrpcServices="Both">`. Verify: build exits 0 and generated `.cs` appears under `src/Corpus/Generated/`.
-- [ ] 2.2 Add protos for repeated (packed and unpacked), maps, nesting depths (1, 3, 8), oneofs (with scalar, string and message members), wrapper types, proto3 `optional`, and an "unknown fields" pair (v2 writer, v1 reader). Verify: build exits 0.
-- [ ] 2.3 Add a service proto with unary, server-streaming, client-streaming and bidi methods over corpus messages. Verify: generated `*Grpc.cs` contains client and server base types for all four.
-- [ ] 2.4 Document the shape-to-definition mapping in `src/Corpus/README.md`. Verify: every shape in the `codegen-shape-corpus` spec has a row.
-- [ ] 2.5 Add round-trip tests (populated, empty and edge values) for every corpus message, and an unknown-field preservation test. Verify: test gate exits 0, and deliberately corrupting one equality check makes it exit non-zero.
-- [ ] 2.6 Add the generated-code drift check (`git diff --exit-code -- src/Corpus/Generated` after a build). Verify: it exits 0 on a clean build, and non-zero after hand-editing a generated file.
+- [x] 2.1 Write the scalar, string and bytes shape protos, and wire `<Protobuf ... OutputDir="Generated/%(RelativeDir)" GrpcServices="Both">`. Verify: build exits 0 and generated `.cs` appears under `src/Corpus/Generated/`.
+- [x] 2.2 Add protos for repeated (packed and unpacked), maps, nesting depths (1, 3, 8), oneofs (with scalar, string and message members), wrapper types, proto3 `optional`, and an "unknown fields" pair (v2 writer, v1 reader). Verify: build exits 0.
+- [x] 2.3 Add a service proto with unary, server-streaming, client-streaming and bidi methods over corpus messages. Verify: generated `*Grpc.cs` contains client and server base types for all four.
+- [x] 2.4 Document the shape-to-definition mapping in `src/Corpus/README.md`. Verify: every shape in the `codegen-shape-corpus` spec has a row.
+- [x] 2.5 Add round-trip tests (populated, empty and edge values) for every corpus message, and an unknown-field preservation test. Verify: test gate exits 0, and deliberately corrupting one equality check makes it exit non-zero.
+- [x] 2.6 Add the generated-code drift check (`git diff --exit-code -- src/Corpus/Generated` after a build). Verify: it exits 0 on a clean build, and non-zero after hand-editing a generated file.
 
 ## 3. Code reading: allocation sites
 

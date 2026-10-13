@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: a oneof with scalar, string and message members.
+message Oneof {
+  int32 id = 1;
+  oneof choice {
+    int32 int32_choice = 2;
+    int64 int64_choice = 3;
+    double double_choice = 4;
+    bool bool_choice = 5;
+    string string_choice = 6;
+    OneofPayload message_choice = 7;
+  }
+}
+
+message OneofPayload {
+  int32 id = 1;
+  string name = 2;
+}

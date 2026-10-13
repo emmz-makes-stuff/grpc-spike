@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package corpus;
+
+option csharp_namespace = "GrpcSpike.Corpus";
+
+// Shape: string fields. Samples cover ASCII, multi-byte UTF-8 and long values.
+message Strings {
+  string short_text = 1;
+  string medium_text = 2;
+  string long_text = 3;
+  string unicode_text = 4;
+}

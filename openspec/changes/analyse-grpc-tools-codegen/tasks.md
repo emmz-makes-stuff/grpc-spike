@@ -2,9 +2,9 @@
 
 ## 1. Solution scaffolding
 
-- [ ] 1.1 Add `global.json` pinning SDK `11.0.100-rc.1.26425.128` (`rollForward: latestFeature`, `allowPrerelease: true`, test runner Microsoft.Testing.Platform). Verify: `dotnet --version` in the repo prints the pinned SDK.
-- [ ] 1.2 Add `Directory.Build.props` (`TreatWarningsAsErrors`, nullable, `LangVersion` latest) and `Directory.Packages.props` with exact pins: Grpc.Tools 2.84.0, Google.Protobuf 3.36.2, Grpc.AspNetCore 2.84.0, Grpc.Net.Client 2.84.0, BenchmarkDotNet 0.15.8, protobuf-net 3.4.30, xunit.v3 4.0.2, Microsoft.AspNetCore.TestHost 10.0.12. Verify: no project file carries a `Version=` attribute.
-- [ ] 1.3 Create `GrpcSpike.slnx` with empty `src/Corpus`, `tests/Corpus.Tests`, `bench/Benchmarks` (net10.0;net11.0) and `bench/Reference` projects, plus `.editorconfig` marking `src/Corpus/Generated/**` as `generated_code = true`. Verify: build, test and format gates all exit 0.
+- [x] 1.1 Add `global.json` pinning SDK `11.0.100-rc.1.26425.128` (`rollForward: latestFeature`, `allowPrerelease: true`, test runner Microsoft.Testing.Platform). Verify: `dotnet --version` in the repo prints the pinned SDK.
+- [x] 1.2 Add `Directory.Build.props` (`TreatWarningsAsErrors`, nullable, `LangVersion` latest) and `Directory.Packages.props` with exact pins: Grpc.Tools 2.84.0, Google.Protobuf 3.36.2, Grpc.AspNetCore 2.84.0, Grpc.Net.Client 2.84.0, BenchmarkDotNet 0.15.8, protobuf-net 3.4.30, xunit.v3 4.0.2, Microsoft.AspNetCore.TestHost 10.0.12. Verify: no project file carries a `Version=` attribute.
+- [x] 1.3 Create `GrpcSpike.slnx` with empty `src/Corpus`, `tests/Corpus.Tests`, `bench/Benchmarks` (net10.0;net11.0) and `bench/Reference` projects, plus `.editorconfig` marking `src/Corpus/Generated/**` as `generated_code = true`. Verify: build, test and format gates all exit 0.
 
 ## 2. Shape corpus and committed generated code
 

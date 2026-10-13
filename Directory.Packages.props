@@ -1,0 +1,18 @@
+<Project>
+  <!-- Exact pins (ADR-0001, design D2). Changing a subject version is a deliberate, reviewable act. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup Label="Subject">
+    <PackageVersion Include="Grpc.Tools" Version="[2.84.0]" />
+    <PackageVersion Include="Google.Protobuf" Version="[3.36.2]" />
+    <PackageVersion Include="Grpc.AspNetCore" Version="[2.84.0]" />
+    <PackageVersion Include="Grpc.Net.Client" Version="[2.84.0]" />
+  </ItemGroup>
+  <ItemGroup Label="Tooling">
+    <PackageVersion Include="BenchmarkDotNet" Version="[0.15.8]" />
+    <PackageVersion Include="protobuf-net" Version="[3.4.30]" />
+    <PackageVersion Include="xunit.v3" Version="[4.0.2]" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="[10.0.12]" />
+  </ItemGroup>
+</Project>

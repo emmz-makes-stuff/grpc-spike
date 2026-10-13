@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- protobuf-net equivalents of comparable corpus shapes. Reference rows only (ADR-0002, design D8). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>GrpcSpike.Reference</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="protobuf-net" />
+  </ItemGroup>
+
+</Project>

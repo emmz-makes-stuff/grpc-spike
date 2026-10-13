@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Corpus/Corpus.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Corpus.Tests/Corpus.Tests.csproj" />
+  </Folder>
+  <Folder Name="/bench/">
+    <Project Path="bench/Benchmarks/Benchmarks.csproj" />
+    <Project Path="bench/Reference/Reference.csproj" />
+  </Folder>
+</Solution>

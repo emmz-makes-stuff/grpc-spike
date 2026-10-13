@@ -1,0 +1,15 @@
+bin/
+obj/
+*.user
+.vs/
+.idea/
+TestResults/
+
+# BenchmarkDotNet working output; curated exports are committed under docs/analysis/results/
+BenchmarkDotNet.Artifacts/
+*.nettrace
+*.speedscope.json
+
+.DS_Store
+.claude/.cc-writes/
+.claude/settings.local.json

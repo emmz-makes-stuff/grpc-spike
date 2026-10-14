@@ -36,6 +36,12 @@ public abstract class MessageOperations
     public abstract object MergeIntoNew();
 
     public abstract object MergeIntoPopulated();
+
+    public abstract object ParseStream();
+
+    public abstract void WriteToStream();
+
+    public abstract object MergeBytesIntoPopulated();
 }
 
 public sealed class MessageOperations<T>(T source) : MessageOperations
@@ -45,6 +51,8 @@ public sealed class MessageOperations<T>(T source) : MessageOperations
     private readonly byte[] payload = source.ToByteArray();
     private readonly byte[] destination = new byte[source.CalculateSize()];
     private readonly SegmentedBufferWriter segmented = new(SegmentSize);
+    private readonly MemoryStream input = new(source.ToByteArray(), writable: false);
+    private readonly MemoryStream output = new(source.CalculateSize());
 
     public override object New() => new T();
 
@@ -79,6 +87,31 @@ public sealed class MessageOperations<T>(T source) : MessageOperations
     {
         var target = source.Clone();
         target.MergeFrom(source);
+        return target;
+    }
+
+    /// <summary>Parses through a <see cref="Stream"/> (report M-08, M-21). The stream is reused, so only the parse allocates.</summary>
+    public override object ParseStream()
+    {
+        input.Position = 0;
+        return parser.ParseFrom(input);
+    }
+
+    /// <summary>Writes through a <see cref="Stream"/> (report M-23). The stream is reused and already big enough.</summary>
+    public override void WriteToStream()
+    {
+        output.Position = 0;
+        source.WriteTo(output);
+    }
+
+    /// <summary>
+    /// Parses the payload into a populated copy of itself (report M-14, the oneof-message merge). Includes the cost of
+    /// <see cref="Clone"/>; subtract that row for the merge alone.
+    /// </summary>
+    public override object MergeBytesIntoPopulated()
+    {
+        var target = source.Clone();
+        target.MergeFrom(new ReadOnlySpan<byte>(payload));
         return target;
     }
 }

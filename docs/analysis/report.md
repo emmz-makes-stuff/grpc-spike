@@ -1,9 +1,10 @@
 # Grpc.Tools generated code: allocation analysis
 
-**Status: provisional (code reading, §3).** Every site below comes from reading code. None is a finding until
-§4's benchmarks and §5.1's attribution traces confirm or reject it. §5 turns confirmed sites into the
-findings table, with a tier, a hot-path or one-off label, a source citation, a benchmark citation and a
-hypothesis status.
+**Status: complete for review (§5).** Every site from the §3 code reading (the appendices) has been checked against the
+committed benchmark results (§4.7, §5.1). Where the byte counts alone don't show which object it is, an attribution
+trace was also used. **Findings** lists the confirmed costs. **Sites not counted** lists the rest, each with its
+reason. This report doesn't decide which findings are worth acting on: that decision is the ADR's, once the numbers
+are reviewed.
 
 ## Subject and citations
 
@@ -15,10 +16,37 @@ hypothesis status.
 | `grpc_csharp_plugin` stub generator | grpc 1.84.0 | `https://github.com/grpc/grpc/blob/v1.84.0/src/compiler/csharp_generator.cc#L<n>` |
 | Grpc.Core.Api, Grpc.Net.Client, Grpc.AspNetCore.Server | 2.84.0 | `https://github.com/grpc/grpc-dotnet/blob/v2.84.0/…#L<n>` |
 
-The message generator and the runtime are different protobuf releases: Grpc.Tools 2.84.0 bundles protoc
+The message generator and the runtime come from different protobuf releases: Grpc.Tools 2.84.0 bundles protoc
 35.1, while the pinned runtime is 3.36.2.
 
-A generator citation means the site is emitted into generated code.
+A generator citation means the site is emitted into generated code. The findings table gives each finding's main
+source location. The site's row in the appendices has the full set of citations.
+
+Link prefixes used below:
+- **RT** = `https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/`
+- **GEN** = `https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/`
+
+## Measurements
+
+- **Where.** Every number comes from `docs/analysis/results/<runtime>/GrpcSpike.Benchmarks.<Class>-report-full.json`.
+  Everything was measured on one AWS EC2 instance: an Intel Xeon Platinum 8259CL with 2 vCPUs, running Ubuntu
+  26.04. Each runtime's `environment.md` gives the details.
+- **Citing a row.** A benchmark citation such as `MessageBenchmarks.ParseSpan(Sample: Maps/populated)` is that row's
+  `FullName` in the class's JSON, without the `GrpcSpike.Benchmarks.` prefix. Use the JSON rather than the
+  `-report-github.md` tables, which shorten sample names.
+- **Bytes.** Bytes are allocated bytes per operation (`Memory.BytesAllocatedPerOperation`), quoted from `net10.0`.
+  They don't depend on the machine, and they are the primary evidence.
+  - `net11.0` gives the same bytes on every message-level row, with two exceptions. The 1 MB `*/edge` rows are
+    under 50 B apart, which is large-object-heap noise. `MessageBenchmarks.MergeIntoPopulated(Sample: Maps/populated)`
+    is 56 B lower on net11.
+  - The end-to-end rows do differ (see S-20–S-35).
+- **Timings.** Timings (`Statistics.Mean`, ns) are indicative only: BenchmarkDotNet's ShortRun on a shared, burstable
+  instance.
+- **Traces.** The attribution traces (`make attribute`, Mac, net10) were used only to see *which* types allocate.
+  Their shares are sampled estimates, so byte counts always come from the committed results. Traces aren't committed
+  (see `README.md`).
+- **Arithmetic.** It uses .NET x64 object sizes (for example, an array has a 24 B header, so `int[128]` is 536 B).
+  Where a row says "exactly", the sum of the objects equals the measured bytes.
 
 **Tiers:**
 - **A:** generated private members or method bodies only.
@@ -30,45 +58,180 @@ A generator citation means the site is emitted into generated code.
 - **One-off:** the cost happens once per type, process or channel. It is never presented as a
   per-operation saving.
 
-## Hypotheses (provisional status)
+## Hypotheses
 
-| # | Hypothesis | Sites | Provisional read |
+| # | Hypothesis | Status | Evidence |
 |---|---|---|---|
-| 1 | Boxing of oneof scalars | M-01, M-02 | Present: one box per scalar set or parse, and again per Clone/Merge. Tier A. |
-| 2 | Per-entry overhead in maps | M-03 to M-06 | Present: a `LinkedListNode` per entry; three objects per map field even when empty; a boxed enumerator per write; entry sizes computed twice. Mostly Tier B. |
-| 3 | String decoding | M-07 to M-10 | One `string` per field is inherent (Tier C to avoid). Extra temporary `byte[]` only for `Stream` input or segmented output (the gRPC write path). |
-| 4 | Bytes copying on parse | M-11, M-12 | Present: a copy plus a `ByteString` per field (Tier C to avoid). Empty-but-present bytes allocate, which strings don't (Tier B). |
-| 5 | Nested message instances | M-13 to M-15 | One object per level is inherent. Extra cost only in the oneof-message merge case (Tier A), plus each instance's eager collections (M-04, M-24). |
-| 6 | Repeated-field growth | M-16, M-17 | Present for packed varint, unpacked, string and message repeats: they grow by doubling. Packed fixed-size fields are pre-sized. Tier B. |
-| 7 | Repeated size calculation on deep messages | M-18, M-19, S-01 | Present as CPU only: nested writes re-size every sub-message, which is O(depth²) with no memoisation. Tier A or B. |
-| 8 | Headroom in the stub layer | S-01 to S-36 | Provisionally rejected: the generated marshaller already takes the runtimes' pooled, no-copy paths. The remaining per-call cost is in Grpc.Net.Client, Grpc.AspNetCore.Server and the HTTP stack (Tier B, out of a generator's reach). |
+| 1 | Boxing of oneof scalars | **Confirmed** | 24 B per set scalar member, on every parse, Clone and Merge (M-01, M-02). |
+| 2 | Per-entry overhead in maps | **Confirmed** | About 70 % of a parsed map's bytes are container overhead (M-03). An empty map field costs 152 B per instance (M-04), and each non-empty map costs 56 B per write (M-05). The CPU site M-06 is not isolated. |
+| 3 | String decoding | **Confirmed off the default path only** | Parsing from a span or sequence allocates just the string, which is inherent (M-07). Temporary copies appear when parsing from a `Stream` (M-08) and when writing to segmented output (M-10). |
+| 4 | Bytes copying on parse | **Confirmed, mostly inherent** | One copy plus one `ByteString` per field is inherent to the API (M-11, Tier C). An empty but present value costs 56 B, and that part is avoidable (M-12, Tier B). |
+| 5 | Nested message instances | **Confirmed as inherent, plus one Tier A case** | 88 B per level, linear in depth (M-13, Tier C). The only extra objects are the 40 B oneof-message merge case (M-14) and each instance's eager collections (M-24, M-25). |
+| 6 | Repeated-field growth | **Confirmed** | 38 % of a parsed `Repeated/populated` is discarded growth arrays and slack (M-16). Clone copies the slack (M-17). |
+| 7 | Repeated size calculation on deep messages | **Confirmed (CPU)** | Write time grows faster than linearly with depth, while `CalculateSize` grows linearly. About 60 % of a depth-8 write is re-sizing (M-18). |
+| 8 | Headroom in the stub layer | **Rejected** | The generated marshaller allocates 0 B to serialize and 104 B to deserialize, which is the message itself. That is about 1.5 % of a 14,240 B unary call. The rest belongs to grpc-dotnet and the HTTP stack (S-20–S-35). |
 
-Sites a generator alone could remove (Tier A, hot path): M-01, M-02, M-14, M-18 (with a size cache), M-24,
-M-25. Code reading found no allocation site for struct wrapper types (M-28) or proto3 `optional` (M-29).
+## Findings
+
+All bytes are net10, per operation. **Avoidable** is what a fix at the stated tier would remove from that row.
+`tests/Corpus.Tests/AllocationTests.cs` pins each row's bytes (M-18 is CPU only).
+
+Weigh each row by whether it is on the gRPC path, not by its size:
+- **Off the gRPC path.** The largest rows are `Stream` parsing and writing (M-08, M-21, M-23), and gRPC calls never
+  use `Stream`. Their marshallers go through `ReadOnlySequence` and `IBufferWriter` (S-01, S-05). The `byte[]`
+  entry points (M-20, M-22) are off the default gRPC path too (S-03 and S-04 aren't taken).
+- **Tier A on the gRPC path.** What a generator alone could fix there is small: 24–152 B per operation (M-01, M-02,
+  M-04, M-14, M-24, M-25). The exception is M-18's CPU cost.
+- **Tier B on the gRPC path.** The larger costs on the gRPC path need runtime changes (M-03, M-05, M-10 on the
+  server, M-12, M-16, M-17).
+
+| ID | Finding | Tier | Hot / one-off | Source | Measured (committed) | Avoidable |
+|---|---|---|---|---|---|---|
+| M-01 | A set scalar oneof member is boxed into `object choice_` on every parse. | A | Hot | `src/Corpus/Generated/protos/Oneof.cs:268`, `:561`; [GEN csharp_primitive_field.cc#L265-L270](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_primitive_field.cc#L265-L270) | `MessageBenchmarks.ParseSpan(Sample: Oneof/populated-int32)` 64 vs `…(Sample: Oneof/empty)` 40. Bool, double and int64 are the same. The trace shows the `System.Int32` box. | 24 B per parse of a set scalar member |
+| M-02 | Clone and MergeFrom unbox the value and box it again, instead of sharing the immutable box. | A | Hot (Clone/Merge) | `src/Corpus/Generated/protos/Oneof.cs:86`, `:463`; [GEN csharp_primitive_field.cc#L320-L322](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_primitive_field.cc#L320-L322) | `MessageBenchmarks.Clone(Sample: Oneof/populated-int32)` 64 vs `…(Sample: Oneof/empty)` 40. `MergeIntoPopulated(Sample: Oneof/populated-int32)` 88 = Clone 64 + 24. | 24 B per Clone or Merge |
+| M-03 | Each map entry costs a `LinkedListNode` plus `Dictionary` slots, so that insertion order is kept. | B | Hot | [RT Collections/MapField.cs#L54-L56](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/MapField.cs#L54-L56), [#L415-L421](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/MapField.cs#L415-L421) | `MessageBenchmarks.ParseSpan(Sample: Maps/populated)` is 24,552 B for 120 entries. Trace: `Dictionary` `Entry[]` ≈ 37 %, `LinkedListNode` ≈ 27 %, bucket `Int32[]` ≈ 8 %, strings ≈ 22 % (sampled). | ≈ 27 % (the nodes) if one ordered structure replaced the two; sampled, not exact |
+| M-04 | Every instance creates a `MapField`, a `Dictionary` and a `LinkedList` for each map field, even when the map stays empty. | A (lazy generated field) or B (lazy inside `MapField`) | Hot (per instance) | `src/Corpus/Generated/protos/Maps.cs:102`, `:113`, `:124`; [RT Collections/MapField.cs#L54-L56](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/MapField.cs#L54-L56) | `MessageBenchmarks.New(Sample: Maps/empty)` 504 = 48 B message + 3 × 152 B, exactly. `ParseSpan(Sample: Maps/empty)` is also 504. | 152 B per empty map field per instance |
+| M-05 | Each write boxes a `LinkedList` enumerator for every non-empty map field. | B | Hot | [RT Collections/MapField.cs#L475](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/MapField.cs#L475), [#L486](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/MapField.cs#L486) | `MessageBenchmarks.WriteToSpan(Sample: Maps/populated)` 168 = 3 × 56 B. `…(Sample: Maps/empty)` is 0. | 56 B per non-empty map field per write |
+| M-08 | Parsing from a `Stream` copies long strings and bytes through temporary arrays. | B | Hot (`Stream` parses only; off the gRPC path) | [RT ParsingPrimitives.cs#L604-L657](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/ParsingPrimitives.cs#L604-L657), [#L782-L787](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/ParsingPrimitives.cs#L782-L787) | `StreamAndMergeBenchmarks.ParseStream(Sample: Strings/populated)` 70,880 = `MessageBenchmarks.ParseSpan` 33,496 + 4,288 (M-21) + 33,096. `…(Sample: Bytes/populated)` 37,528 = 16,552 + 4,288 + 16,688. For about 16.6 KB of string or blob content, that is about two temporary copies for strings and one for bytes. The chunk-by-chunk mechanism was not traced. | 33,096 B (`Strings/populated`), 16,688 B (`Bytes/populated`) |
+| M-10 | A string that doesn't fit the current output segment is first encoded into a temporary `byte[]`. | B | Hot (segmented output: `Stream` writes, and the server's response `PipeWriter`) | [RT WritingPrimitives.cs#L186-L192](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/WritingPrimitives.cs#L186-L192) | `MessageBenchmarks.WriteToSegmentedWriter(Sample: Strings/populated)` 16,760 vs `WriteToSpan` 0. That benchmark uses 32-byte segments, which is pessimistic. Same sample: `StreamAndMergeBenchmarks.WriteToStream` 20,592 = 4,184 (M-23) + 16,408. The client writes into one exact-size pooled buffer (S-24), where this doesn't trigger. | Up to one copy of each string that crosses a segment boundary (16,408 B on `Strings/populated` through a `Stream`) |
+| M-12 | An empty but present bytes value allocates `new byte[0]` and a new `ByteString`, instead of returning `ByteString.Empty`. | B | Hot (small) | [RT ParsingPrimitives.cs#L420-L426](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/ParsingPrimitives.cs#L420-L426) | `MessageBenchmarks.ParseSpan(Sample: Optional/edge-defaults-present)` 128 vs `…(Sample: Optional/empty)` 72: 24 B + 32 B. Empty strings return `string.Empty`. | 56 B per empty present bytes value |
+| M-14 | Parsing a oneof message member that is already set builds a new sub-message and merges the old one into it. | A | Hot (merge into a set member only) | `src/Corpus/Generated/protos/Oneof.cs:581-586`; [GEN csharp_message_field.cc#L231-L245](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_message_field.cc#L231-L245) | `StreamAndMergeBenchmarks.MergeBytesIntoPopulated(Sample: Oneof/populated-message)` 160 = `MessageBenchmarks.Clone(Sample: Oneof/populated-message)` 80 + 80. Merging in place would need only the 40 B string. | 40 B (one `OneofPayload`) per merge |
+| M-16 | Packed varint, unpacked, string and message repeats grow by doubling as they parse. Packed fixed-size fields are pre-sized. | B | Hot | [RT Collections/RepeatedField.cs#L146](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/RepeatedField.cs#L146), [#L315-L334](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/RepeatedField.cs#L315-L334); `src/Corpus/Generated/protos/Repeated.cs:339`, `:349`, `:358`, `:362` | `MessageBenchmarks.ParseSpan(Sample: Repeated/populated)` 8,856, exactly. It holds 2,688 B of discarded growth arrays and 640 B of slack in the final arrays. The pre-sized packed double is `double[100]` (824 B). Trace: `Double[]` ≈ 33 %, `Int32[]` ≈ 25 %. | Up to 3,328 B (38 %) with exact pre-sizing; the discarded arrays alone are 2,688 B |
+| M-17 | Clone copies each backing array whole, slack included. | B | Hot (Clone) | [RT Collections/RepeatedField.cs#L56-L66](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/Collections/RepeatedField.cs#L56-L66) | `MessageBenchmarks.Clone(Sample: Repeated/populated)` 4,984, exactly. The source was built by `Add`, giving capacity 128 for 100 elements and 32 for 20. | 864 B (17 %) here; the amount depends on the source's growth history |
+| M-18 | Nested writes re-size every sub-message for its length prefix, which is O(depth²) with no memoisation. | A (size cached in a generated private field) or B | Hot (CPU) | [RT WritingPrimitivesMessages.cs#L26-L30](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/WritingPrimitivesMessages.cs#L26-L30); `src/Corpus/Generated/protos/Nesting.cs:204`, `:223`; [GEN csharp_message_field.cc#L121](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_message_field.cc#L121) | `MessageBenchmarks.CalculateSize(Sample: Node/populated-depth1/3/8)` is 13.6 / 40.9 / 108.6 ns, which is linear. `WriteToSpan` on the same samples is 27.7 / 123.8 / 585.6 ns (net11: 22.9 / 134.0 / 540.3). A linear write at depth 8 would take about 8 × 27.7 ≈ 222 ns. 0 B. | About 60 % of a depth-8 write (CPU; indicative timings) |
+| M-20 | `ParseFrom(byte[])` allocates a `CodedInputStream` on every call. | B | Hot | [RT MessageParser.cs#L259-L264](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/MessageParser.cs#L259-L264) | `MessageBenchmarks.ParseByteArray` − `ParseSpan` = 168 B on every sample (e.g. `Sample: Scalars/populated`: 272 vs 104). | 168 B per call |
+| M-21 | `ParseFrom(Stream)` allocates a `CodedInputStream` and a fresh 4 KiB buffer on every call. | B | Hot (`Stream` parses only; off the gRPC path) | [RT MessageExtensions.cs#L296-L304](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/MessageExtensions.cs#L296-L304), [RT CodedInputStream.cs#L104-L105](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/CodedInputStream.cs#L104-L105) | `StreamAndMergeBenchmarks.ParseStream` − `MessageBenchmarks.ParseSpan` = 4,288 B (`byte[4096]` 4,120 + 168) on 48 of 52 samples. The other four add M-08. | Up to 4,288 B per call (4,120 B by pooling the buffer) |
+| M-22 | `ToByteArray` allocates a `CodedOutputStream` on every call. | B | Hot | [RT MessageExtensions.cs#L94-L102](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/MessageExtensions.cs#L94-L102) | `MessageBenchmarks.ToByteArray(Sample: Scalars/empty)` 88 = `byte[0]` 24 + 64. | 64 B per call |
+| M-23 | `WriteTo(Stream)` allocates a `CodedOutputStream` and a fresh 4 KiB buffer on every call. | B | Hot (`Stream` writes only; off the gRPC path) | [RT MessageExtensions.cs#L109-L116](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/MessageExtensions.cs#L109-L116), [RT CodedOutputStream.cs#L120](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/CodedOutputStream.cs#L120) | `StreamAndMergeBenchmarks.WriteToStream` is 4,184 B (4,120 + 64) on 48 of 52 samples. `Maps/*` add M-05 (4,352). `Strings/populated` and `Strings/edge` add M-10. | Up to 4,184 B per call (4,120 B by pooling the buffer) |
+| M-24 | Every instance creates a `RepeatedField` for each repeated field, even when it stays empty. | A | Hot (per instance) | `src/Corpus/Generated/protos/Repeated.cs:101`, `:112`, `:123`, `:134`, `:145`, `:156`; [GEN csharp_repeated_primitive_field.cc#L39](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_repeated_primitive_field.cc#L39) | `MessageBenchmarks.New(Sample: Repeated/empty)` 264 = 72 B message + 6 × 32 B, exactly. | 32 B per empty repeated field per instance |
+| M-25 | The copy constructor runs the field initialisers, then replaces every collection they created. | A | Hot (Clone) | `src/Corpus/Generated/protos/Repeated.cs:81-88`, `src/Corpus/Generated/protos/Maps.cs:85-89`; [GEN csharp_message.cc#L360](https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/csharp_message.cc#L360) | `MessageBenchmarks.Clone(Sample: Maps/empty)` 960 = 504 + 456 discarded (3 × 152). `…(Sample: Repeated/empty)` 456 = 264 + 192 discarded (6 × 32). | 32 B per repeated field and 152 B per map field, per Clone |
+| M-26 | Unknown fields are decoded into an `UnknownFieldSet` of typed lists. | B | Hot (only when unknown fields are present) | [RT UnknownFieldSet.cs#L139-L158](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/UnknownFieldSet.cs#L139-L158), [RT UnknownField.cs#L254-L261](https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/UnknownField.cs#L254-L261) | `UnknownFieldBenchmarks.ParseV2AsV1` 1,376 vs 320 for the same bytes with every field known (`MessageBenchmarks.ParseByteArray(Sample: Unknown.V2.Record/populated)`), so 1,056 B more. `CloneWithUnknowns` 600 vs `Clone(Sample: Unknown.V2.Record/populated)` 64. | Part of 1,056 B per parse and 536 B per Clone; a raw-bytes store would still allocate something |
+| S-20–S-35 | grpc-dotnet, ASP.NET Core and `System.Net.Http` allocate per call and per streamed message. | B (in those libraries; out of a generator's reach) | Hot | For example, client [GrpcCall.cs#L70-L75](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.Net.Client/Internal/GrpcCall.cs#L70-L75), [#L960-L972](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.Net.Client/Internal/GrpcCall.cs#L960-L972) and server [HttpContextServerCallContext.cs#L64](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.AspNetCore.Server/Internal/HttpContextServerCallContext.cs#L64). Each site's citations are in Appendix B. | `EndToEndBenchmarks.Unary(Messages: 1)` is 14,240 B per call, about 208 B of it from the generated marshaller (hypothesis 8). Each extra streamed message, as (`Messages: 10` − `Messages: 1`) / 9: server streaming ≈ 300 B, client streaming ≈ 80 B, bidi ≈ 1,470 B. net11 is 15,621 B per unary call, and 1.1–2.9 KB higher across the end-to-end rows. Noise is a few hundred bytes, because BenchmarkDotNet counts every thread. | Not attributed per site; out of scope for a generator |
+
+## Sites not counted
+
+| Site(s) | Why | Evidence |
+|---|---|---|
+| M-27 | **Rejected.** No boxed enumerator is measured once the code is optimised: .NET 10's JIT removes both of them (in `CalculateSize` and `WriteTo`). They do exist in unoptimised (tier-0) code. `AllocationTests` measured 248 B (136 + 2 × 56) before tier-up, and the test warms up past tier-up for that reason. | `UnknownFieldBenchmarks.ReserializeUnknownsAsV1` 136 B equals `MessageBenchmarks.ToByteArray(Sample: Unknown.V2.Record/populated)` 136 B, which writes the same bytes with no `UnknownFieldSet`. The trace shows only `Byte[]` and `CodedOutputStream`. |
+| S-01–S-10 (hypothesis 8) | **Rejected.** The generated stub and marshaller code takes the runtimes' pooled, no-copy paths. S-01's CPU re-sizing is M-18. S-03/S-04 are fallbacks that aren't taken, S-08 is a struct, and S-10 is the failure path. | `MarshallerBenchmarks.Serialize` 0 B. `MarshallerBenchmarks.Deserialize` 104 B, the same as `MessageBenchmarks.New(Sample: Scalars/empty)` 104 B, i.e. the message (S-05). A unary call deserializes twice: 208 B of 14,240 B ≈ 1.5 %. |
+| M-07, M-11, M-13, M-15, S-05 | **Inherent** (Tier C to avoid): one `string` per string field, one copy plus a `ByteString` per bytes field, one object per message. | `MessageBenchmarks.ParseSpan(Sample: Strings/populated)` 33,496 = 56 B message + the four strings. `…(Sample: Bytes/populated)` 16,552 = 40 B message + two copies and two `ByteString`s. `…(Sample: Node/populated-depth1/3/8)` 88 / 264 / 704 = 88 B per level. In M-16's exact sum, each `RepeatedItem` is 40 B plus its name. |
+| M-28, M-29 | **No site**, as the code reading found. | The `Wrappers` and `Optional` parse traces show the message plus string and bytes content only. `MessageBenchmarks.ParseSpan(Sample: Wrappers/empty)` and `…(Sample: Optional/empty)` equal `New` (88 and 72 B). |
+| M-06, M-09, M-19 | **Not isolated** (CPU, no allocation). No benchmark separates the second size pass from the rest of the write. They stay as sites in the M-18 family and are not counted. | The `CalculateSize` and `WriteToSpan` rows include them but can't separate them. |
+| M-30, S-06, S-07, S-09 | **One-off** (per type, process or channel). BenchmarkDotNet's warm-up excludes them. They are never a per-operation saving. | None needed. |
+| S-29, S-36 | **Off the measured path:** blocking unary calls, and compression (off in the benchmarks). | None. |
 
 ### Other observation (not an allocation site)
 
-A singular proto3 `double` holding `-0.0` does not round-trip in Google.Protobuf 3.36.2. The generated
-writer guards the field with `!= 0D` (`src/Corpus/Generated/protos/Scalars.cs:399`), so `-0.0` is never
-written and parses back as `+0.0`. Equality, though, compares bitwise
-(`src/Corpus/Generated/protos/Scalars.cs:334`), so the two values compare unequal. Repeated `-0.0` does
-round-trip. Recorded for the §5.3 upstream survey.
+A singular proto3 `double` holding `-0.0` does not round-trip in Google.Protobuf 3.36.2:
 
-## Message code and Google.Protobuf runtime
+- The generated writer guards the field with `!= 0D` (`src/Corpus/Generated/protos/Scalars.cs:399`). So `-0.0` is
+  never written, and it parses back as `+0.0`.
+- Equality, though, compares bitwise (`src/Corpus/Generated/protos/Scalars.cs:334`), so the two values compare
+  unequal.
+- Repeated `-0.0` does round-trip.
 
-Scope: candidate allocation (and notable CPU) sites found by **reading code only**. Everything here is
-**provisional**: the §4 benchmarks and attribution traces still have to confirm or reject each row. The
-generated code is the committed corpus output (`src/Corpus/Generated/protos/`, protoc 35.1 via Grpc.Tools
+The upstream survey found no existing issue for this (see below), so it is worth filing as a bug.
+
+## Prior art
+
+Surveyed on 2026-10-14. The release versions and dates come from NuGet. The repo status and licences come from
+GitHub. The allocation claims are each project's own; none of them was measured here. "Drop-in" has two levels:
+
+- **API:** the generated types keep Google.Protobuf's public API: `IMessage<T>`, `Parser`, descriptors,
+  `RepeatedField`/`MapField`, `JsonFormatter`, the well-known types and reflection.
+- **Build:** consumers keep their `<Protobuf Include>` items and the Grpc.Tools MSBuild targets.
+
+| Candidate | Wire-compatible | API drop-in | Build drop-in | Allocation approach | Status | Licence |
+|---|---|---|---|---|---|---|
+| [Google.Protobuf](https://github.com/protocolbuffers/protobuf) + [Grpc.Tools](https://github.com/grpc/grpc) (baseline) | Yes | n/a | n/a | Span-based `ParseContext`/`WriteContext` since 3.15. Messages, collections, strings and `ByteString` stay on the heap. The C# generator has no option that reduces allocations, and arenas exist only in C++. | 3.36.2 (2026-09-17); Grpc.Tools 2.84.0 (2026-09-14) | BSD-3 / Apache-2.0 |
+| [protobuf-net](https://github.com/protobuf-net/protobuf-net) (+ protogen, BuildTools, [protobuf-net.Grpc](https://github.com/protobuf-net/protobuf-net.Grpc)) | Yes | No: `[ProtoContract]` plain classes, code-first service interfaces | Partial: a Roslyn generator over `<AdditionalFiles>`, not `<Protobuf>` | Runtime-emitted serializers, pooled buffers. Its compile-time model targets AOT, not allocations. | 3.4.30 (2026-09-16), very active | Apache-2.0 |
+| [LightProto](https://github.com/dameng324/LightProto) | Yes | No: protobuf-net-style classes with `List`/`Dictionary` | No: a CLI generator | Source-generated; span, sequence and `IBufferWriter` APIs; optional struct messages | 1.4.0 (2026-08-02), one maintainer | MIT |
+| [Protobuf.Generator](https://github.com/ByboyCn/Protobuf.Library) | Claimed | No: its own API | No: its own `<ProtoFile>` item | Not documented | 1.0.3 (2026-06-17), immature | MIT |
+| [Lagrange.Proto](https://github.com/LagrangeDev/LagrangeV2) | Yes | No: attribute-based | No | Source-generated, claims "low allocation" | 1.0.10 (2026-07-11), repo archived | GPL-3.0 |
+| [MessagePack-CSharp](https://github.com/MessagePack-CSharp/MessagePack-CSharp), [MemoryPack](https://github.com/Cysharp/MemoryPack), [MagicOnion](https://github.com/Cysharp/MagicOnion), [Bond](https://github.com/microsoft/bond) | **No** (other formats) | No | No | Pooled or memory-layout serializers | Active, except Bond (archived, ended 2025-03-31) | MIT |
+
+**No existing tool is drop-in at either level.**
+
+- Every wire-compatible alternative gives up the Google.Protobuf API and replaces `<Protobuf Include>`.
+- Only protobuf-net is mature, and it aims at a plain-class API and AOT, not at an allocation-lean version of the
+  Google.Protobuf API.
+- **The build hook a separate tool could use:** Grpc.Tools' `BUILD-INTEGRATION.md` (grpc/grpc `src/csharp`) documents
+  `AdditionalProtocArguments="--plugin=…;--x_out=…"` per `<Protobuf>` item, and the `PROTOBUF_PROTOC` and
+  `GRPC_PROTOC_PLUGIN` environment variables. So an extra protoc plugin can run without consumers leaving
+  `<Protobuf Include>`. But nothing switches off `--csharp_out`, so the standard C# output is still generated
+  alongside it.
+
+## Upstream
+
+Surveyed on 2026-10-14 by searching GitHub issues and PRs, open and closed. protobuf lands PRs through Copybara, so
+"landed" means the close event carries a commit.
+
+### History for each finding
+
+| Finding | Related upstream work | Outcome |
+|---|---|---|
+| M-01, M-02 | [protobuf#329](https://github.com/protocolbuffers/protobuf/issues/329): the single-`object` oneof layout, copied from Java | Closed 2015. **No issue or PR about the boxing.** |
+| M-03 | [protobuf#1700](https://github.com/protocolbuffers/protobuf/pull/1700): removed the documented ordering guarantee, explicitly to allow a change later | Merged 2016. The implementation never changed, so the `LinkedList` isn't required by any contract. |
+| M-04 | **None found for C#.** Nearest is Java's [protobuf#29660](https://github.com/protocolbuffers/protobuf/issues/29660), where a maintainer was sceptical that caching empty maps pays off. | Java issue closed 2026-09-15 |
+| M-05 | [protobuf#13503](https://github.com/protocolbuffers/protobuf/issues/13503) → [protobuf#14284](https://github.com/protocolbuffers/protobuf/pull/14284) (`AsStructEnumerable`, by jskeet). It covers the public enumerator, not `WriteTo`'s internal one. | The issue was closed as inactive in 2024. The PR was never reviewed and closed as inactive on 2025-03-13. |
+| M-08 | [protobuf#7644](https://github.com/protocolbuffers/protobuf/pull/7644): strings across segments, span path only | Merged 2020. **The `Stream` case is not covered.** |
+| M-10 | [protobuf#7663](https://github.com/protocolbuffers/protobuf/pull/7663) (JamesNK): exactly this case. [#8147](https://github.com/protocolbuffers/protobuf/pull/8147) and [#8149](https://github.com/protocolbuffers/protobuf/pull/8149) cover only the fast path. | #7663 was closed unmerged on 2021-10-14, with no response to the last review. #8147 and #8149 were merged in 2021. |
+| M-12 | **None found for C#.** Java's equivalent is [protobuf#24922](https://github.com/protocolbuffers/protobuf/pull/24922). | Java PR merged 2025-12-17 |
+| M-14 | **None found.** The generator's `TODO: We may be able to do better than this` is the only trace. | — |
+| M-16 | [protobuf#28925](https://github.com/protocolbuffers/protobuf/issues/28925) and [protobuf#29131](https://github.com/protocolbuffers/protobuf/pull/29131): packed varint pre-count plus the second size pass (M-19). Also [#17111](https://github.com/protocolbuffers/protobuf/issues/17111) (no pre-allocation for large repeats) and [#16772](https://github.com/protocolbuffers/protobuf/pull/16772) (`UnsafeCollectionOperations`). | #29131 has been **open since 2026-08-11**: a maintainer invited the PR, and the reviewer couldn't look at it before September. #17111 closed 2024 with no change. #16772 landed 2024-12-03. |
+| M-17 | **None found** (Clone copying slack). | — |
+| M-18 | **None found for C#.** #29131 mentions size caching as an alternative it considered. The generator's `TODO: Memoize size of frozen messages?` is the only other trace. | — |
+| M-20, M-22 | [protobuf#11406](https://github.com/protocolbuffers/protobuf/pull/11406) (span `ParseFrom` for `byte[]`) and [protobuf#8808](https://github.com/protocolbuffers/protobuf/pull/8808) (`ToByteArray` via span) | #11406 closed as inactive in 2024. #8808 was withdrawn by its author in 2021 after a legacy-interop test failed. |
+| M-21, M-23 | [protobuf#8238](https://github.com/protocolbuffers/protobuf/issues/8238): buffer pooling is blocked because there is no disposal API. Also [protobuf#8321](https://github.com/protocolbuffers/protobuf/issues/8321) (pooled `ToByteArray`). | #8321 was closed in 2022 as implemented by #7645. **Nothing on the per-call 4 KiB buffer itself.** |
+| M-24, M-25 | **None found.** The related designs [protobuf#7722](https://github.com/protocolbuffers/protobuf/pull/7722) (allocations moved for pooling) and [protobuf#9683](https://github.com/protocolbuffers/protobuf/pull/9683) (struct messages) are much broader. | Both were closed unmerged. On #9683, jskeet said it needs "a *lot* of research" (2022). |
+| M-26 | [protobuf#9194](https://github.com/protocolbuffers/protobuf/issues/9194): code simplicity, not allocations | Closed as inactive in 2024 |
+| S-20–S-35 | Steady grpc-dotnet allocation work: [#489](https://github.com/grpc/grpc-dotnet/pull/489), [#1033](https://github.com/grpc/grpc-dotnet/pull/1033), [#1850](https://github.com/grpc/grpc-dotnet/pull/1850), [#2256](https://github.com/grpc/grpc-dotnet/pull/2256), [#2597](https://github.com/grpc/grpc-dotnet/pull/2597). Still open: [#2078](https://github.com/grpc/grpc-dotnet/issues/2078) and [#2665](https://github.com/grpc/grpc-dotnet/issues/2665). [#970](https://github.com/grpc/grpc-dotnet/issues/970) (a ValueTask service API) was closed on the day it opened. | The five PRs merged between 2019 and 2025 |
+| `-0.0` observation | **None found.** | — |
+
+### How each upstream takes contributions
+
+**protocolbuffers/protobuf (C#)**
+- **Status:** C# 3.36.x is under "Active Support", not maintenance mode.
+- **Rules:** a Google CLA is required. `CONTRIBUTING.md` asks for small, single-concern PRs, and inactive PRs are
+  closed by a bot.
+- **Reviewers:** jskeet, amanda-tarafa and JasonLunn, all visibly short of time. For example, jskeet wrote "I don't
+  have the time to review this at this time" on
+  [#26851](https://github.com/protocolbuffers/protobuf/pull/26851), which was closed as inactive on 2026-09-21.
+- **Small, clear fixes do land:**
+  - [#26455](https://github.com/protocolbuffers/protobuf/pull/26455), a generator over-allocation fix, landed in 1 day
+    (2026-03-19).
+  - [#29707](https://github.com/protocolbuffers/protobuf/pull/29707) landed in 13 days (2026-09-23).
+- **Larger performance work is slow or dies:**
+  - [#20392](https://github.com/protocolbuffers/protobuf/pull/20392) took 15 months.
+  - #7663, #11406, #14284 and #26851 all died.
+- **What jskeet asks for** (#13503): evidence from a real application, not microbenchmarks, and opt-in,
+  non-breaking changes.
+
+**grpc/grpc-dotnet**
+- **Rules:** a CNCF EasyCLA is required.
+- **Reviewers:** in practice one maintainer (JamesNK).
+- **Targeted performance PRs that come with BenchmarkDotNet numbers do get merged.** For example,
+  [#2697](https://github.com/grpc/grpc-dotnet/pull/2697) merged in 13 days (2026-03-25).
+- **Some go unreviewed:** [#2629](https://github.com/grpc/grpc-dotnet/pull/2629) waited 4 months, and its author
+  closed it in 2025.
+
+**grpc/grpc `csharp_generator.cc`**
+- **Activity:** very low. There have been 4 commits since 2022, and two PRs have been open since 2023.
+- **Relevance:** none of the findings belongs here. The message TODOs (M-14, M-18) are in protobuf's
+  `src/google/protobuf/compiler/csharp`.
+
+## Appendix A: code-reading sites, message code and Google.Protobuf runtime
+
+Scope: candidate allocation (and notable CPU) sites found by **reading code only** (task 3.1). These rows are the
+full source record for the findings above. Their tier and hot-path columns are the code-reading view. The final
+status of each row is in **Findings** or **Sites not counted**. The generated code is the committed corpus output (`src/Corpus/Generated/protos/`, protoc 35.1 via Grpc.Tools
 2.84.0). Runtime citations are Google.Protobuf 3.36.2 (`protocolbuffers/protobuf@v36.2`); generator
 citations are the protoc C# generator at `@v35.1`. A generator citation means the site is emitted into
 generated code, so a fix there is Tier A unless it also needs runtime or API changes. Generated-code line
 numbers point at the compiled path: `IBufferMessage.InternalMergeFrom(ref ParseContext)` and
 `InternalWriteTo(ref WriteContext)`, not the `#else` (`GOOGLE_PROTOBUF_REFSTRUCT_COMPATIBILITY_MODE`)
-legacy bodies. Hypothesis 8 (stub-layer headroom) is covered by 3.2.
-
-Link prefixes used below:
-- **RT** = `https://github.com/protocolbuffers/protobuf/blob/v36.2/csharp/src/Google.Protobuf/`
-- **GEN** = `https://github.com/protocolbuffers/protobuf/blob/v35.1/src/google/protobuf/compiler/csharp/`
+legacy bodies. Hypothesis 8 (stub-layer headroom) is covered by Appendix B. Link prefixes (RT, GEN) are as defined
+at the top.
 
 | ID | Hypothesis | Location | Citation(s) | What allocates and when | Tier (prov.) | Hot / one-off | Notes |
 |---|---|---|---|---|---|---|---|
@@ -103,13 +266,13 @@ Link prefixes used below:
 | M-29 | Other: proto3 `optional` presence | Generated | `src/Corpus/Generated/protos/Optional.cs:57` | **No allocation site found.** Presence is tracked in a private `_hasBits0` int for value types, and by null for string/bytes. | n/a | n/a | Strings and bytes cost as M-07/M-11/M-12. |
 | M-30 | Other: static/type initialisation | Generated | `src/Corpus/Generated/protos/Nesting.cs:24-27` (descriptor from base64), `:49` (parser singleton), `src/Corpus/Generated/protos/Maps.cs:101`, `:112`, `:123` (static codecs) | Descriptor building (base64 decode, `FileDescriptor` graph), the `MessageParser<T>` singleton and the field codecs. | n/a | **One-off** (per type/process) | Excluded from per-operation savings. Listed so attribution traces can recognise these and discount them. |
 
-## Service stubs and the gRPC call path
+## Appendix B: code-reading sites, service stubs and the gRPC call path
 
 Scope: a code reading (task 3.2) of the stub and marshaller code that `grpc_csharp_plugin` (Grpc.Tools 2.84.0,
 grpc v1.84.0) generates for `CorpusService`, and of the Grpc.Core.Api, Grpc.Net.Client and Grpc.AspNetCore.Server
-2.84.0 paths it hands messages to, as far as Google.Protobuf 3.36.2's parse/write entry points. Everything here
-is **provisional**: it comes from reading the code, no sizes are measured, and §4 benchmarks and §5.1 attribution
-traces confirm or reject each row. Tiers: **A** = generated private members or method bodies only (a change to
+2.84.0 paths it hands messages to, as far as Google.Protobuf 3.36.2's parse/write entry points. These rows come
+from reading the code, and the "provisional" columns are that reading's view. The measured outcome is hypothesis 8
+(rejected) and the S-20–S-35 row in **Findings**. Tiers: **A** = generated private members or method bodies only (a change to
 `csharp_generator.cc`); **B** = runtime-library internals with no public API change; **C** = public API change.
 "Per call" means once per RPC; "per message" means once per message sent or received; one-off means once per
 type, process or channel. Message-level costs inside `CalculateSize`/`WriteTo`/`MergeFrom` belong to task 3.1
@@ -164,10 +327,10 @@ Server side (Grpc.AspNetCore.Server):
 | S-35 | Grpc.AspNetCore.Server | [ServerStreamingServerCallHandler.cs#L51](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.AspNetCore.Server/Internal/CallHandlers/ServerStreamingServerCallHandler.cs#L51); [ClientStreamingServerCallHandler.cs#L52](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.AspNetCore.Server/Internal/CallHandlers/ClientStreamingServerCallHandler.cs#L52); [DuplexStreamingServerCallHandler.cs#L49-L50](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.AspNetCore.Server/Internal/CallHandlers/DuplexStreamingServerCallHandler.cs#L49-L50) | Per streaming call: `HttpContextStreamReader<T>` and/or `HttpContextStreamWriter<T>`. | B | Per call | |
 | S-36 | Grpc.Net.Client / Grpc.AspNetCore.Server | [StreamExtensions.cs#L260](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.Net.Client/Internal/StreamExtensions.cs#L260); [GrpcCallSerializationContext.cs#L292-L301](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.Net.Client/Internal/GrpcCallSerializationContext.cs#L292-L301); [PipeExtensions.cs#L448](https://github.com/grpc/grpc-dotnet/blob/v2.84.0/src/Grpc.AspNetCore.Server/Internal/PipeExtensions.cs#L448) | Compression: `MemoryStream`s and array copies per message. | B | Per message, only with compression | Compression is off in the planned benchmarks; out of scope, recorded only. |
 
-### Hypothesis 8: headroom in the stub layer (provisional)
+### Hypothesis 8: headroom in the stub layer (the code-reading argument)
 
-**Provisionally rejected as a source of savings in generated code.** What generated code alone controls is small
-and already allocation-optimal on the default path:
+**Rejected; the measurement is in Hypotheses above.** The code reading below predicted that result. What generated
+code alone controls is small and already allocation-optimal on the default path:
 
 - Per message, the generated marshaller does one `CalculateSize` plus `WriteTo(IBufferWriter)` (S-01), and
   `ParseFrom(ReadOnlySequence)` (S-05). Its `SetPayloadLength` call is what lets both runtimes write into a pooled
@@ -181,6 +344,115 @@ and already allocation-optimal on the default path:
   entirely in Grpc.Net.Client, Grpc.AspNetCore.Server and System.Net.Http/ASP.NET Core: Tier B at best, and out of a
   generator's reach. A separate generator would inherit all of it.
 
-The one generated-code CPU question is S-01's double walk on nested messages, which is hypothesis 7 (3.1). §4.3
-(marshaller-only) against §4.4 (whole call) should confirm that the marshaller's share of the whole-call
-allocations is small and is essentially the message object plus its fields.
+The one generated-code CPU question is S-01's double walk on nested messages, which is hypothesis 7 (M-18).
+`MarshallerBenchmarks` against `EndToEndBenchmarks` confirmed the rest: the marshaller allocates only the message
+(104 B for `Scalars`), about 1.5 % of a unary call.
+
+## Separate-tool assessment
+
+A separate tool generates the message code in place of protoc's C# generator, and keeps the Google.Protobuf runtime.
+It is assessed at the two compatibility levels defined under Prior art. The effort figures are rough judgements, not
+estimates from a plan.
+
+**What a separate tool can reach.**
+- **Tier A: yes.** It owns the generated code, so it can make every Tier A change.
+- **Tier B: no.** Those changes live inside the runtime's internals, and generated code reaches the runtime only
+  through its public API.
+- **Shipping its own runtime instead breaks the API.** `RepeatedField`, `MapField`, `ByteString` and `IMessage<T>`
+  are Google.Protobuf types, so replacing them is Tier C.
+- **The stub generator offers nothing to change** (hypothesis 8 rejected).
+- **Two Tier B costs are partly reachable through public API:**
+  - **M-18:** `WriteContext.WriteLength` is public, so generated code can write a cached size and then the
+    sub-message's own body.
+  - **M-16, packed fields only:** `RepeatedField<T>.Capacity` is public, so generated code can size a packed field
+    from its byte length (an upper bound) before reading it. This is untested here. Unpacked fields give no length
+    up front.
+
+### Level 1: API only
+
+Consumers keep the generated public API, but change how the code is generated. For example, they run the tool, or
+reference its own MSBuild package with its own item type.
+
+- **Savings available:** the Tier A rows plus the partial M-16 above, all on the gRPC path.
+  - **M-01, M-02:** 24 B per parse, Clone or Merge of a set scalar oneof member.
+  - **M-04, M-24 (lazy collections):** up to 152 B per unused map field and 32 B per unused repeated field, per
+    instance. This is up to 456 B of `New(Sample: Maps/empty)`'s 504 B, and 192 B of `New(Sample: Repeated/empty)`'s
+    264 B.
+  - **M-25:** the discarded initialisers per Clone, 456 B of `Clone(Sample: Maps/empty)`'s 960 B. With lazy
+    collections, an empty `Maps` would clone as its 48 B object alone.
+  - **M-14:** 40 B per merge into a set oneof message.
+  - **M-18:** about 60 % of a depth-8 write's CPU.
+  - **Scale:** these are tens to hundreds of bytes per message. Next to a 14,240 B unary call, they are per-message
+    costs inside the 1.5 % generated share, plus whatever a message's eager collections add.
+- **Rough effort: weeks for a first version, then ongoing.**
+  - Fork protoc's C# generator (C++, `src/google/protobuf/compiler/csharp`) and change the emitters behind these
+    rows.
+  - Prove the API is unchanged: descriptors, reflection, JSON, well-known types, proto2/editions features and
+    extensions.
+  - Pass the protobuf conformance suite.
+  - The ongoing cost is tracking every protoc release, because the runtime and the generator move together.
+  - Writing a generator from scratch would take months.
+
+### Level 2: API and build integration
+
+Consumers keep `<Protobuf Include>` and the Grpc.Tools targets, and add one package reference.
+
+- **Savings available:** the same as Level 1. Build integration removes adoption friction; it saves no bytes.
+- **Mechanism:**
+  - Grpc.Tools reads the protoc path from the MSBuild property `Protobuf_ProtocFullPath` (or the `PROTOBUF_PROTOC`
+    environment variable; see `build/_protobuf/Google.Protobuf.Tools.targets` in Grpc.Tools 2.84.0). A package could
+    set it to its own protoc build, or to a wrapper that sends `--csharp_out` to the tool's generator.
+  - `AdditionalProtocArguments` alone is not enough: it adds a plugin, but `--csharp_out` still runs, so every type
+    would be generated twice.
+- **Rough effort: Level 1 plus a few weeks.**
+  - Native protoc or wrapper binaries for every platform Grpc.Tools ships (Windows, Linux, macOS; x64 and arm64).
+  - A `.props` file that sets the property.
+  - Tests across Grpc.Tools versions, since the property is a Grpc.Tools internal and could change.
+
+### Compared with upstream
+
+The Tier A changes could instead be PRs to protoc's C# generator, and the Tier B changes can only land upstream. The
+upstream section above describes how each project takes such PRs. Choosing between the routes is the decision ADR's
+job, not this report's.
+
+## Summary grid
+
+**For review.** Allocated bytes per operation, net10 (net11 is the same). The rows are representative samples; the
+committed exports hold every sample. Current bytes come from `MessageBenchmarks`: Parse is `ParseSpan`, which is
+the parse the gRPC marshaller does. Write is `WriteToSpan`. Clone is `Clone`. The savings are the Findings'
+**Avoidable** bytes for that sample, with the finding IDs. "—" means none.
+
+| Shape (sample) | Parse | Write | Clone | Tier A saving | Tier B saving |
+|---|---|---|---|---|---|
+| `Scalars/populated` | 104 | 0 | 104 | — | — |
+| `Strings/populated` | 33,496 | 0 | 56 | — | — (M-07 is inherent. Segmented output adds up to 16,408 B: M-10.) |
+| `Bytes/populated` | 16,552 | 0 | 40 | — | — (M-11 is inherent) |
+| `Repeated/populated` | 8,856 | 0 | 4,984 | Clone 192 (M-25) | Parse 3,328 (M-16); Clone 864 (M-17) |
+| `Repeated/empty` | 264 | 0 | 456 | Parse 192, Clone 384 (M-24, M-25) | — |
+| `Maps/populated` | 24,552 | 168 | 19,624 | Clone 456 (M-25) | Parse ≈ 6.6 KB, sampled (M-03); Write 168 (M-05) |
+| `Maps/empty` | 504 | 0 | 960 | Parse 456, Clone 912 (M-04, M-25) | — |
+| `Node/populated-depth3` | 264 | 0 | 144 | Write CPU (M-18; about 60 % at depth 8) | — |
+| `Oneof/populated-int32` | 64 | 0 | 64 | Parse 24, Clone 24, Merge 24 (M-01, M-02) | — |
+| `Oneof/populated-message` | 120 | 0 | 80 | 40 per merge into the set member (M-14) | — |
+| `Optional/edge-defaults-present` | 128 | 0 | 72 | — | Parse 56 (M-12) |
+| `Wrappers/populated` | 216 | 0 | 88 | — | — |
+
+The same ideas in plain terms:
+- **Off the gRPC path, any shape** (Tier B):
+  - `ParseFrom(Stream)` +4,288 B (M-21);
+  - `WriteTo(Stream)` +4,184 B (M-23);
+  - `ParseFrom(byte[])` +168 B (M-20);
+  - `ToByteArray` +64 B (M-22);
+  - long strings and bytes from a `Stream` (M-08).
+- **Unknown fields** (Tier B): 1,056 B per parse and 536 B per Clone, only when they are present (M-26).
+- **A whole call:** `EndToEndBenchmarks.Unary(Messages: 1)` is 14,240 B. About 208 B of it is the generated
+  marshaller (two `Scalars` messages), and the rest is grpc-dotnet and the HTTP stack (Tier B, out of a generator's
+  reach).
+- **Checking the grid:** its Parse, Write and Clone columns were generated from
+  `results/net10.0/GrpcSpike.Benchmarks.MessageBenchmarks-report-full.json` with:
+
+  ```sh
+  jq -r '.Benchmarks[] | select(.FullName | test("\\.(ParseSpan|WriteToSpan|Clone)\\(Sample: (Scalars/populated|Strings/populated|Bytes/populated|Repeated/(populated|empty)|Maps/(populated|empty)|Node/populated-depth3|Oneof/populated-(int32|message)|Optional/edge-defaults-present|Wrappers/populated)\\)")) | "\(.FullName) \(.Memory.BytesAllocatedPerOperation)"' docs/analysis/results/net10.0/GrpcSpike.Benchmarks.MessageBenchmarks-report-full.json
+  ```
+
+  `tests/Corpus.Tests/AllocationTests.cs` pins the savings' bytes.

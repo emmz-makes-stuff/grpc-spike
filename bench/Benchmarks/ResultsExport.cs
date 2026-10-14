@@ -16,7 +16,7 @@ namespace GrpcSpike.Benchmarks;
 public static class ResultsExport
 {
     private const string PinPrefix = "Pin:";
-    private static readonly string[] CuratedPatterns = ["*-report-github.md", "*-report-full.json"];
+    private static readonly string[] CuratedSuffixes = ["-report-github.md", "-report-full.json"];
 
     public static void Write(IEnumerable<Summary> summaries, BenchmarkTarget target, string resultsDirectory)
     {
@@ -27,8 +27,19 @@ public static class ResultsExport
         }
 
         Directory.CreateDirectory(resultsDirectory);
-        foreach (var file in ran.SelectMany(s => CuratedPatterns.SelectMany(p => Directory.EnumerateFiles(s.ResultsDirectoryPath, p))))
+        // Name the files of the classes that ran: BenchmarkDotNet's results folder also holds earlier runs' exports
+        // (attributed runs included), and a filtered run must not copy those over committed results.
+        var files = ran.SelectMany(s => s.BenchmarksCases
+            .Select(c => c.Descriptor.Type.FullName)
+            .Distinct()
+            .SelectMany(type => CuratedSuffixes.Select(suffix => Path.Combine(s.ResultsDirectoryPath, type + suffix))));
+        foreach (var file in files)
         {
+            if (!File.Exists(file))
+            {
+                throw new FileNotFoundException("BenchmarkDotNet did not write an expected export.", file);
+            }
+
             File.Copy(file, Path.Combine(resultsDirectory, Path.GetFileName(file)), overwrite: true);
         }
 

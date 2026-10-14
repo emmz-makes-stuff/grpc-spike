@@ -32,11 +32,12 @@
 
 ## 5. Analysis report
 
-- [ ] 5.1 Confirm or reject each hypothesis with attribution traces and benchmark numbers, and finalise each finding's tier, hot-path or one-off label, and both citations. Verify: every finding row cites both a source location and a committed result.
-- [ ] 5.2 Add allocation-count tests asserting the measured cost of each confirmed finding. Verify: test gate exits 0.
-- [ ] 5.3 Write the prior-art survey (alternative generators and serializers, with drop-in fit) and the upstream survey (contribution receptiveness, plus linked issues and PRs on each finding). Verify: each confirmed finding states any related upstream history, or "none found".
-- [ ] 5.4 Write the separate-tool assessment at both compatibility levels: API only, and API plus build integration. Verify: both levels state the available savings and the rough effort.
-- [ ] 5.5 Write the summary grid (shape × operation, current allocations, and the Tier A/B savings) for Emmz's review. Verify: the grid is generated from or checked against the committed exports.
+- [x] 5.1 Add `StreamAndMergeBenchmarks` (every sample × ParseStream, WriteToStream, MergeBytesIntoPopulated) for the code-reading sites with no committed benchmark (M-08, M-14, M-21, M-23), and run it on both runtimes on the same AWS instance as 4.7. Verify: `docs/analysis/results/net10.0/` and `.../net11.0/` hold 156 rows for it, each with allocated bytes.
+- [x] 5.2 Confirm or reject each hypothesis with attribution traces and benchmark numbers, and finalise each finding's tier, hot-path or one-off label, and both citations. Verify: every finding row cites both a source location and a committed result.
+- [x] 5.3 Add allocation-count tests asserting the measured cost of each confirmed finding. Verify: test gate exits 0.
+- [x] 5.4 Write the prior-art survey (alternative generators and serializers, with drop-in fit) and the upstream survey (contribution receptiveness, plus linked issues and PRs on each finding). Verify: each confirmed finding states any related upstream history, or "none found".
+- [x] 5.5 Write the separate-tool assessment at both compatibility levels: API only, and API plus build integration. Verify: both levels state the available savings and the rough effort.
+- [x] 5.6 Write the summary grid (shape × operation, current allocations, and the Tier A/B savings) for Emmz's review. Verify: the grid is generated from or checked against the committed exports.
 
 ## 6. Decision
 

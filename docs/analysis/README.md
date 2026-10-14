@@ -7,6 +7,7 @@
 | Class | What it measures |
 |---|---|
 | `MessageBenchmarks` | Every corpus sample (`Samples.All`) × `New`, `ParseByteArray`, `ParseSpan`, `ToByteArray`, `WriteToSpan`, `WriteToSegmentedWriter` (32-byte segments, report M-10), `CalculateSize`, `Clone`, `MergeIntoNew`, `MergeIntoPopulated`. The merge rows include a `New` or `Clone`; subtract that row for the merge alone. |
+| `StreamAndMergeBenchmarks` | Every corpus sample × `ParseStream`, `WriteToStream` (both through a reused `MemoryStream`) and `MergeBytesIntoPopulated` (parse the sample's bytes into a clone of itself). These are the code-reading sites off the gRPC path (report M-08, M-14, M-21, M-23). The merge row includes a `Clone`; subtract `MessageBenchmarks`' `Clone` row for the merge alone. |
 | `UnknownFieldBenchmarks` | The v1 record reading v2 bytes, then re-serialising and cloning what it kept (M-26/M-27). |
 | `MarshallerBenchmarks` | The generated `Marshaller<Scalars>` alone, through minimal reusable serialization contexts. |
 | `EndToEndBenchmarks` | Whole in-process calls through ASP.NET Core TestHost: unary and the three streaming kinds, 1 and 10 messages per stream (`Unary` ignores `Messages`). Same message as `MarshallerBenchmarks`. Singleton service, `UnaryAsync`, no compression. |
@@ -36,8 +37,8 @@ net10.0. BenchmarkDotNet 0.15.8 has no .NET 11 moniker, so net11.0 runs through 
 - `environment.md`: the runtime that was measured, the host OS, every pin from `Directory.Packages.props`, and the
   subject assemblies' versions as loaded.
 
-A run copies only the classes it ran, so a filtered run refreshes those files and leaves the rest. Commit results
-from a full run.
+A run copies only the classes it ran, so a filtered run refreshes those files and leaves the rest. It always rewrites
+`environment.md`, though. So commit a filtered run's results only if it ran on the same machine as the rest.
 
 ## Allocation attribution
 
